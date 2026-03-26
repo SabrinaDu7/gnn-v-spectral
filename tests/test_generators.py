@@ -39,3 +39,22 @@ def test_generate_lfr_basic():
     assert max(G.nodes()) == 999
 
     assert sum(metadata["community_sizes"]) == 1000
+
+
+
+from data.generators.characterize import compute_all_graph_stats
+
+def test_compute_all_graph_stats_sbm():
+    G, labels, _ = generate_sbm(SBMConfig(), seed=0)
+    stats = compute_all_graph_stats(G, labels)
+
+    assert stats["n_nodes"] == 1000
+    assert stats["num_edges"] == G.number_of_edges()
+    assert stats["avg_degree"] > 0
+    assert 0.0 <= stats["density"] <= 1.0
+    assert 0.0 <= stats["sparsity"] <= 1.0
+    assert stats["num_connected_components"] >= 1
+    assert 0.0 <= stats["largest_cc_fraction"] <= 1.0
+    assert stats["num_communities"] == 5
+    assert 0.0 <= stats["intercommunity_edge_fraction"] <= 1.0
+    assert 0.0 <= stats["heterophily"] <= 1.0
