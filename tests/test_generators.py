@@ -58,3 +58,59 @@ def test_compute_all_graph_stats_sbm():
     assert stats["num_communities"] == 5
     assert 0.0 <= stats["intercommunity_edge_fraction"] <= 1.0
     assert 0.0 <= stats["heterophily"] <= 1.0
+
+
+from pathlib import Path
+import pandas as pd
+
+from data.generators.characterize import compute_all_graph_stats
+from data.generators.io import (
+    format_base_graph_id,
+    format_noise_code,
+    make_graph_id,
+    make_output_paths,
+    save_graph_edgelist,
+    save_labels,
+    write_metadata_csv,
+)
+from data.generators.sbm import SBMConfig, generate_sbm
+
+
+def test_io_end_to_end(tmp_path: Path):
+    G, labels, metadata = generate_sbm(SBMConfig(), seed=0)
+    stats = compute_all_graph_stats(G, labels)
+
+    base_graph_id = format_base_graph_id(1)
+    noise_code = format_noise_code(0.0)
+    graph_id = make_graph_id(base_graph_id, noise_code, "clean", "sbm")
+    paths = make_output_paths(tmp_path, "sbm", "clean", graph_id)
+
+    save_graph_edgelist(G, labels, paths["edge_path"])
+    save_labels(labels, paths["label_path"])
+
+    assert paths["edge_path"].exists()
+    assert paths["label_path"].exists()
+
+    df = pd.read_csv(paths["edge_path"])
+    assert list(df.columns) == ["src", "dst", "same_comm", "comm_pair"]
+
+    loaded_labels = np.load(paths["label_path"])
+    assert len(loaded_labels) == G.number_of_nodes()
+
+    row = {
+        "graph_id": graph_id,
+        "family": "sbm",
+        "base_graph_id": base_graph_id,
+        "seed": 0,
+        "noise_type": "clean",
+        "noise_code": noise_code,
+        "noise_frac": 0.0,
+        "edge_path": str(paths["edge_path"]),
+        "label_path": str(paths["label_path"]),
+        **stats,
+        **metadata,
+    }
+
+    write_metadata_csv([row], paths["metadata_path"])
+    assert paths["metadata_path"].exists()
+    
