@@ -1,7 +1,29 @@
 [project]
-name = "comp511-project"
+name = "gnn-v-spectral"
 version = "0.1.0"
-description = "Add your description here"
+description = "Analyzing wether GNN-based methods perform better under structural noise, compared to spectral methods"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "comet-ml>=3.57.3",
+    "jaxtyping>=0.3.9",
+    "networkx>=3.6.1",
+    "scikit-learn>=1.8.0",
+    "scipy>=1.17.1",
+    "torch-geometric>=2.7.0",
+    "tyro>=1.0.11",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.basedpyright]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+testpaths = ["test/"]
+python_files = ["test.py"]
