@@ -7,6 +7,7 @@ from typing import Any, Callable
 import networkx as nx
 import numpy as np
 
+from data import DEFAULT_DATASET_ROOT
 from data.generators.characterize import compute_all_graph_stats
 from data.generators.io import (
     format_base_graph_id,
@@ -25,7 +26,7 @@ from data.generators.sbm import SBMConfig, generate_sbm
 
 GeneratorFn = Callable[[Any, int], tuple[nx.Graph, np.ndarray, dict[str, Any]]]
 
-DEFAULT_DATASET_ROOT = Path("data/cache/synthetic")
+DEFAULT_DATASET_ROOT = Path(DEFAULT_DATASET_ROOT)
 DEFAULT_NUM_BASE_GRAPHS = 5
 DEFAULT_NOISE_FRACS = [i / 100 for i in range(5, 50, 5)]
 

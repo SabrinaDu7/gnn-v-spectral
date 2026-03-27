@@ -7,8 +7,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from data import DEFAULT_DATASET_ROOT
 
-DEFAULT_DATASET_ROOT = Path("data/cache/synthetic")
+
+DEFAULT_DATASET_ROOT = Path(DEFAULT_DATASET_ROOT)
 DEFAULT_NUM_BASE_GRAPHS = 5
 DEFAULT_NOISE_FRACS = [i / 100 for i in range(5, 50, 5)]
 EXPECTED_EDGE_COLUMNS = ["src", "dst", "same_comm", "comm_pair"]

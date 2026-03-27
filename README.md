@@ -15,12 +15,16 @@ TODO: Confirm with Jamie and Finn but I think it should be five base graphs, and
 
 ## Community Detection Methods (Sabrina)
 This project compares 9 different TRANSDUCTIVE methods: 6 spectral and 3 GNN-based methods. These are:
-1. Whole-eigenspectrum logistic regression
-2. Whole-eigenspectrum label propagation
-3. k-cut eigenspectrum logistic regression
-4. k-cut eigenspectrum label propagation
-5. Regularized eigenspectrum logistic regression
-6. Regularized eigenspectrum label propagation
+
+Spectral:
+1. Whole-eigenspectrum embedding + logistic regression
+2. Whole-eigenspectrum + label propagation
+3. k-cut eigenspectrum + logistic regression
+4. k-cut eigenspectrum + label propagation
+5. Regularized eigenspectrum + logistic regression
+6. Regularized eigenspectrum + label propagation
+
+GNNs: 
 7. Simple Graph Convolution (SGC) - middle-ground between spectral and GNN-based
 8. Graph Convolutional Network (GCN)
 9. Graph Attention Network (GAT)
@@ -28,7 +32,6 @@ This project compares 9 different TRANSDUCTIVE methods: 6 spectral and 3 GNN-bas
 ## Training and Evaluation Protocol (Finn)
 - We compute Adjusted Random Index (ARI) on test nodes/labels only: -1 is perfect disagreement, 0 is chance agreement, 1 is perfect agreement.
 - We also compute relative degradation: ARI at noise level x / ARI at noise level 0.
-- Hyperparameter tuning via optuna.
 
 
 ## What to compare and how to ensure fair comparisons?
