@@ -5,7 +5,6 @@ from __future__ import annotations
 import numpy as np
 import scipy.sparse as sp
 from scipy.linalg import eigh
-from scipy.sparse.linalg import eigsh
 
 import torch
 from jaxtyping import Float, Int
@@ -44,55 +43,59 @@ def whole_eigenspectrum(
         Matrix whose columns are eigenvectors.
     """
     L = _normalized_laplacian(edge_index, num_nodes)
-    eigenvals, V = eigh(L.toarray(), eigvals_only=False)
+    eigenvals, V = eigh(L.toarray(), eigvals_only=False) #type: ignore
     return torch.from_numpy(V).float(), torch.from_numpy(eigenvals).float()
 
 
 def kcut_eigenspectrum(
     edge_index: Int[Tensor, "2 num_edges"],
     num_nodes: int,
-    sigma: float = 1e-5,
     *,
-    n_eigenvectors: int,
-) -> Float[Tensor, "num_nodes k"]:
-    # TODO: FIX THIS!!! NOT CORRECT
+    eigengap: float | None = None,
+    all_V: Float[Tensor, "num_nodes num_nodes"] | None = None,
+    all_eigenvalues: Float[Tensor, "num_nodes"] | None = None,
+) -> tuple[Float[Tensor, "num_nodes k"], Float[Tensor, "k"]]:
+    
+    # TODO: Read more into this!
     """
     Bottom-k eigenvectors of the symmetric normalized Laplacian, where k is
-    selected automatically via the eigengap heuristic.
+    selected automatically via the eigengap heuristic on the full spectrum.
 
-    Computes the ``n_eigenvectors`` smallest eigenvectors, then sets k to the
-    index of the largest consecutive gap in the sorted eigenvalue sequence.
+    Finds the largest gap between consecutive eigenvalues (sorted ascending)
+    at position k, then returns the first k eigenvectors.
 
     Parameters
     ----------
     edge_index : Int[Tensor, "2 num_edges"]
     num_nodes : int
-    n_eigenvectors : int
-        Candidate pool size; k will satisfy 1 <= k <= n_eigenvectors.
+    all_V : Float[Tensor, "num_nodes num_nodes"], optional
+        Precomputed eigenvector matrix (columns sorted by ascending eigenvalue).
+        If None, ``whole_eigenspectrum`` is called.
+    all_eigenvalues : Float[Tensor, "num_nodes"], optional
+        Precomputed eigenvalues sorted ascending. If None, ``whole_eigenspectrum``
+        is called.
 
     Returns
     -------
     Float[Tensor, "num_nodes k"]
+    Float[Tensor, "k"]
     """
-    L = _normalized_laplacian(edge_index, num_nodes)
-    eigenvalues, V = eigsh(L, k=n_eigenvectors, which='LM', sigma=sigma, return_eigenvectors=True)
-    order = np.argsort(eigenvalues)
-    eigenvalues = eigenvalues[order]
-    V = V[:, order]
-    k = int(np.argmax(np.diff(eigenvalues))) + 1
-    return torch.from_numpy(V[:, :k]).float()
+    if all_V is None or all_eigenvalues is None:
+        all_V, all_eigenvalues = whole_eigenspectrum(edge_index, num_nodes)
+
+    eigenvalues_np = all_eigenvalues.numpy()
+    k = int(np.argmax(np.diff(eigenvalues_np))) + 1
+    return all_V[:, :k], all_eigenvalues[:k]
 
 
 def regularized_eigenspectrum(
     edge_index: Int[Tensor, "2 num_edges"],
     num_nodes: int,
-    *,
-    n_eigenvectors: int,
-    sigma: float = 1e-5,
-) -> tuple[Float[Tensor, "num_nodes n_eigenvectors_plus_1"], Float[Tensor, "n_eigenvectors_plus_1"]]:
+    L: sp.spmatrix | None = None,
+) -> tuple[Float[Tensor, "num_nodes num_nodes"], Float[Tensor, "num_nodes"]]:
     """
-    Bottom-(n_eigenvectors+1) eigenvectors of the Tikhonov-regularized
-    symmetric normalized Laplacian.
+    Full eigendecomposition of the Tikhonov-regularized symmetric normalized
+    Laplacian.
 
     Regularization: ``L_tik = L + tau * I`` where ``tau = mean(degree)``.
 
@@ -100,14 +103,15 @@ def regularized_eigenspectrum(
     ----------
     edge_index : Int[Tensor, "2 num_edges"]
     num_nodes : int
-    n_eigenvectors : int
-        k in the formula ``eigsh(L_tik, k=n_eigenvectors+1)``.
 
     Returns
     -------
-    Float[Tensor, "num_nodes n_eigenvectors_plus_1"]
+    Float[Tensor, "num_nodes num_nodes"]
+        Matrix whose columns are eigenvectors.
     """
-    L = _normalized_laplacian(edge_index, num_nodes)
+    if L is None:
+        L = _normalized_laplacian(edge_index, num_nodes)
+        
     d = degree(edge_index[0], num_nodes=num_nodes).numpy() # TODO: Double check
     tau = float(np.mean(d))
     L_tik = L + tau * sp.eye(num_nodes)

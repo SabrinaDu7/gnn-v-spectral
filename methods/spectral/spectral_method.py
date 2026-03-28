@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from typing import Literal, Self
+from jaxtyping import Float, Int
 
 import torch
-from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
+from sklearn.metrics import adjusted_rand_score
 
 from data import GraphData
 from methods.base import BaseMethod, ExperimentConfig
@@ -15,6 +16,20 @@ from methods.spectral.embeddings import (
     regularized_eigenspectrum,
     whole_eigenspectrum,
 )
+
+def get_spectral_embeddings(embedding_type: Literal["whole", "kcut", "regularized"], 
+                            edge_index: Int[torch.Tensor, "2 num_edges"], 
+                            num_nodes: int,
+                            ) -> tuple[Float[torch.Tensor, "num_nodes n_eigenvectors"], Float[torch.Tensor, "n_eigenvectors"]]:
+    
+    if embedding_type == "whole":
+        return whole_eigenspectrum(edge_index, num_nodes)
+    elif embedding_type == "kcut":
+        return kcut_eigenspectrum(edge_index, num_nodes)
+    elif embedding_type == "regularized":
+        return regularized_eigenspectrum(edge_index, num_nodes)
+    else:
+        raise ValueError(f"Invalid embedding_type: {embedding_type!r}")
 
 
 class SpectralMethod(BaseMethod):
@@ -49,6 +64,7 @@ class SpectralMethod(BaseMethod):
         self,
         config: ExperimentConfig,
         *,
+        embeddings: Float[torch.Tensor, "n_nodes n_eigenvectors"] | None = None,
         embedding_type: Literal["whole", "kcut", "regularized"],
         classifier_type: Literal["lr", "lp"],
     ) -> None:
@@ -64,7 +80,7 @@ class SpectralMethod(BaseMethod):
             if classifier_type == "lr"
             else LPClassifier()
         )
-        self._embeddings: torch.Tensor | None = None
+        self._embeddings = embeddings
 
     def fit(self, data: GraphData) -> Self:
         """
@@ -83,22 +99,16 @@ class SpectralMethod(BaseMethod):
         -------
         Self
         """
-        num_nodes = data.labels.shape[0]
-        edge_index = data.graph.edge_index
+        num_nodes = data.graph.num_nodes
+        edge_index: Int[torch.Tensor, "2 num_edges"] = data.graph.edge_index
+        assert num_nodes is not None, "GraphData.graph.num_nodes must be set."
 
-        if self.embedding_type == "whole":
-            embeddings = whole_eigenspectrum(edge_index, num_nodes)
-        elif self.embedding_type == "kcut":
-            embeddings = kcut_eigenspectrum(
-                edge_index, num_nodes, n_eigenvectors=self.config.n_eigenvectors
-            )
-        else:  # "regularized"
-            embeddings = regularized_eigenspectrum(
-                edge_index, num_nodes, n_eigenvectors=self.config.n_eigenvectors
+        if self._embeddings is None:
+            self._embeddings, _ = get_spectral_embeddings(
+                self.embedding_type, edge_index, num_nodes, #type: ignore
             )
 
-        self._embeddings = embeddings
-        self._classifier.fit(data, embeddings, data.graph.x)
+        self._classifier.fit(data, self._embeddings, data.graph.x)
         return self
 
     def score(self, data: GraphData) -> dict[str, float]:
