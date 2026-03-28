@@ -28,13 +28,13 @@ class GraphData():
     num_classes: int
     labels: Int[torch.Tensor, "n_nodes"]
 
-    whole_eigenspectrum: Float[torch.Tensor, "n_nodes n_nodes"]
-    kcut_eigenspectrum: Float[torch.Tensor, "n_nodes n_eigenvectors"]
-    regularized_eigenspectrum: Float[torch.Tensor, "n_nodes n_nodes"]
+    whole_eigenvals: Float[torch.Tensor, "n_nodes"] | None = None
+    kcut_eigenvals: Float[torch.Tensor, "n_eigenvectors"] | None = None
+    regularized_eigenvals: Float[torch.Tensor, "n_nodes"] | None = None
 
-    whole_eigenvals: Float[torch.Tensor, "n_nodes"]
-    kcut_eigenvals: Float[torch.Tensor, "n_eigenvectors"]
-    regularized_eigenvals: Float[torch.Tensor, "n_nodes"]
+    whole_eigenspectrum: Float[torch.Tensor, "n_nodes n_nodes"] | None = None
+    kcut_eigenspectrum: Float[torch.Tensor, "n_nodes n_eigenvectors"] | None = None
+    regularized_eigenspectrum: Float[torch.Tensor, "n_nodes n_nodes"] | None = None
 
     features: Float[torch.Tensor, "n_nodes feature_dim"] | None = None
 

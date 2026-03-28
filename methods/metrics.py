@@ -16,7 +16,7 @@ def compute_ari(
     pred_labels: Int[torch.Tensor, "n_nodes"],
 ) -> float:
     """
-    Compute Adjusted Rand Index on data.valid_idx nodes.
+    Compute Adjusted Rand Index on data.val_idx nodes.
 
     Parameters
     ----------
@@ -31,8 +31,8 @@ def compute_ari(
         ARI in [-1, 1]; 0 = chance, 1 = perfect agreement.
     """
 
-    true = data.labels[data.valid_idx].cpu().numpy()
-    pred = pred_labels[data.valid_idx].cpu().numpy()
+    true = data.labels[data.val_idx].cpu().numpy()
+    pred = pred_labels[data.val_idx].cpu().numpy()
     return float(adjusted_rand_score(true, pred))
 
 
@@ -55,8 +55,8 @@ def compute_nmi(
     float
         NMI in [0, 1]; 0 = no mutual information, 1 = perfect agreement.
     """
-    true = data.labels[data.valid_idx].cpu().numpy()
-    pred = pred_labels[data.valid_idx].cpu().numpy()
+    true = data.labels[data.val_idx].cpu().numpy()
+    pred = pred_labels[data.val_idx].cpu().numpy()
     return float(normalized_mutual_info_score(true, pred))
 
 
