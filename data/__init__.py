@@ -50,6 +50,7 @@ def load_graph_data(
     spectra_path: str | Path,
     *,
     features_pt: str | Path | None = None,
+    seed: int | None = None,
     dataset_root: str | Path = DEFAULT_DATASET_ROOT,
 ) -> GraphData:
     """
@@ -68,6 +69,10 @@ def load_graph_data(
         Path to a .pt file containing a Float[Tensor, "n_nodes feature_dim"]
         node feature matrix. If None, falls back to an n_nodes x n_nodes
         one-hot identity matrix.
+    seed : int | None
+        If provided, passed to torch.manual_seed before generating the
+        70/15/15 train/val/test split so the partition is deterministic.
+        If None, the split is random (not reproducible across calls).
     dataset_root : str | Path
         Root used to resolve relative edge_path and label_path from the CSV.
 
@@ -99,6 +104,8 @@ def load_graph_data(
     else:
         features = torch.eye(num_nodes)
 
+    if seed is not None:
+        torch.manual_seed(seed)
     perm      = torch.randperm(num_nodes)
     train_end = int(0.7  * num_nodes)
     val_end   = int(0.85 * num_nodes)
