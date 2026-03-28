@@ -23,18 +23,12 @@ import numpy as np
 import pandas as pd
 import torch
 
+from data.generators.io import load_edge_index
 from methods.spectral.embeddings import regularized_eigenspectrum, whole_eigenspectrum
 
 FAMILIES = ("lfr", "sbm")
 NOISE_TYPES = ("clean", "random", "targeted_betweenness")
 
-
-def _load_edge_index(edge_path: Path) -> torch.Tensor:
-    df = pd.read_csv(edge_path)
-    src = torch.tensor(df["src"].to_numpy(dtype=np.int64), dtype=torch.long)
-    dst = torch.tensor(df["dst"].to_numpy(dtype=np.int64), dtype=torch.long)
-    # Make undirected by stacking both directions
-    return torch.stack([torch.cat([src, dst]), torch.cat([dst, src])], dim=0)
 
 
 def precompute(
@@ -68,7 +62,7 @@ def precompute(
 
             labels = np.load(label_path)
             num_nodes = len(labels)
-            edge_index = _load_edge_index(edge_path)
+            edge_index = load_edge_index(edge_path)
 
             print(f"  {graph_id} ({num_nodes} nodes) ...", end=" ", flush=True)
 
