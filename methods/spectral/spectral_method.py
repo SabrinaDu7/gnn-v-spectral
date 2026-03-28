@@ -10,7 +10,7 @@ from sklearn.metrics import adjusted_rand_score
 
 from data import GraphData
 from methods.base import BaseMethod, ExperimentConfig
-from methods.spectral.classifiers import LPClassifier, LRClassifier, SpectralClassifier
+from methods.spectral.classifiers import LPClassifier, LRClassifier, RFClassifier, SpectralClassifier
 from methods.spectral.embeddings import (
     kcut_eigenspectrum,
     regularized_eigenspectrum,
@@ -50,9 +50,10 @@ class SpectralMethod(BaseMethod):
           "whole"       — full eigenspectrum of the normalised Laplacian
           "kcut"        — bottom-k eigenvectors (spectral k-way cut)
           "regularized" — regularized Laplacian spectrum (tau-shift)
-    classifier_type : {"lr", "lp"}
+    classifier_type : {"lr", "lp", "rf"}
         "lr" — logistic regression fit on train_idx embeddings
         "lp" — label propagation seeded from train_idx ground-truth labels
+        "rf" — random forest fit on train_idx embeddings; requires config.n_estimators
 
     Notes
     -----
@@ -66,23 +67,34 @@ class SpectralMethod(BaseMethod):
         *,
         embeddings: Float[torch.Tensor, "n_nodes n_eigenvectors"] | None = None,
         embedding_type: Literal["whole", "kcut", "regularized"],
-        classifier_type: Literal["lr", "lp"],
+        classifier_type: Literal["lr", "lp", "rf"],
     ) -> None:
         super().__init__(config)
-        if embedding_type in ("kcut", "regularized") and config.n_eigenvectors is None:
+        if embedding_type in ("kcut", "regularized"):
             raise ValueError(
                 f"config.n_eigenvectors must be set for embedding_type={embedding_type!r}"
             )
         self.embedding_type = embedding_type
         self.classifier_type = classifier_type
-        self.classifier: SpectralClassifier = (
-            LRClassifier(seed=config.seed)
-            if classifier_type == "lr"
-            else LPClassifier()
-        )
+        if classifier_type == "lr":
+            self.classifier: SpectralClassifier = LRClassifier(seed=config.seed)
+        elif classifier_type == "lp":
+            self.classifier = LPClassifier()
+        elif classifier_type == "rf":
+            if config.n_estimators is None:
+                raise ValueError("config.n_estimators must be set for classifier_type='rf'")
+            self.classifier = RFClassifier(seed=config.seed, n_estimators=config.n_estimators)
+        else:
+            raise ValueError(f"Invalid classifier_type: {classifier_type!r}")
         self.embeddings = embeddings
 
-    def fit(self, data: GraphData) -> SpectralClassifier:
+    def fit(
+        self,
+        data: GraphData,
+        *,
+        study_name: str | None = None,
+        optuna_storage_path: str | None = None,
+    ) -> SpectralClassifier:
         """
         Compute spectral embedding on the full graph; fit classifier on train_idx.
 
@@ -94,6 +106,10 @@ class SpectralMethod(BaseMethod):
         Parameters
         ----------
         data : GraphData
+        study_name : str | None
+            Unused; present for API consistency with BaseMethod.
+        optuna_storage_path : str | None
+            Unused; present for API consistency with BaseMethod.
 
         Returns
         -------
@@ -111,16 +127,23 @@ class SpectralMethod(BaseMethod):
         self.classifier.fit(data, self.embeddings, data.graph.x)
         return self.classifier
 
-    def score(self, data: GraphData) -> dict[str, float]:
+    def score(
+        self,
+        data: GraphData,
+        *,
+        use_test_idx: bool = False,
+    ) -> dict[str, float]:
         """
-        Predict community labels for data.val_idx and compute metrics.
+        Predict community labels for data.val_idx (or data.test_idx) and compute metrics.
 
-        ARI computed via sklearn.metrics against data.labels[val_idx].
+        ARI computed via sklearn.metrics against data.labels[idx].
         relative_ARI is float("nan"); filled in at pipeline level.
 
         Parameters
         ----------
         data : GraphData
+        use_test_idx : bool
+            If True, evaluate on data.test_idx instead of data.val_idx.
 
         Returns
         -------
@@ -130,9 +153,10 @@ class SpectralMethod(BaseMethod):
         if self.embeddings is None:
             raise RuntimeError("SpectralMethod.fit() must be called before score().")
 
+        idx = data.test_idx if use_test_idx else data.val_idx
         preds = self.classifier.predict(self.embeddings, data.graph.x)
-        true = data.labels[data.val_idx].numpy()
-        pred = preds[data.val_idx].numpy()
+        true = data.labels[idx].numpy()
+        pred = preds[idx].numpy()
 
         return {
             "ARI": float(adjusted_rand_score(true, pred)),
