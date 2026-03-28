@@ -63,7 +63,7 @@ def run_single_feature(
     """
     from data import load_graph_data
 
-    graph_id = graph_id = row["graph_id"]
+    graph_id = row["graph_id"]
     metadata_csv = f"data/synthetic_benchmark/metadata/graph_index_{row['family']}.csv"
 
     # Experiment 2: pass feature_path as features_pt so the feature matrix is loaded.
@@ -83,10 +83,8 @@ def run_single_feature(
     classifier.fit(data)
 
     # ── score on val and test splits ─────────────────────────────────────
-    # NOTE: score(data, split=...) requires Sabrina to extend BaseMethod.score
-    # with a split parameter. Until then these calls will raise TypeError.
-    val_metrics  = classifier.score(data, split="val")
-    test_metrics = classifier.score(data, split="test")
+    val_metrics  = classifier.score(data)
+    test_metrics = classifier.score(data, use_test_idx=True)
 
     return {
         "graph_id": graph_id,

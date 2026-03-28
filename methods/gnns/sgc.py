@@ -26,7 +26,13 @@ class SGC(BaseMethod):
     def __init__(self, config: ExperimentConfig) -> None:
         raise NotImplementedError
 
-    def fit(self, data: GraphData) -> Self:
+    def fit(
+        self,
+        data: GraphData,
+        *,
+        study_name: str | None = None,
+        optuna_storage_path: str | None = None,
+    ) -> Self:
         """
         Pre-propagate features for config.k_hops steps; train linear classifier
         on data.train_idx nodes for config.epochs steps.
@@ -34,6 +40,10 @@ class SGC(BaseMethod):
         Parameters
         ----------
         data : GraphData
+        study_name : str | None
+            Optuna study name; passed through to hyperparameter search if used.
+        optuna_storage_path : str | None
+            Path to Optuna storage backend; passed through if used.
 
         Returns
         -------
@@ -41,9 +51,14 @@ class SGC(BaseMethod):
         """
         raise NotImplementedError
 
-    def score(self, data: GraphData) -> dict[str, float]:
+    def score(
+        self,
+        data: GraphData,
+        *,
+        use_test_idx: bool = False,
+    ) -> dict[str, float]:
         """
-        Evaluate SGC predictions on data.valid_idx nodes.
+        Evaluate SGC predictions on data.val_idx (or data.test_idx) nodes.
 
         ARI and NMI computed via sklearn.metrics.
         relative_ARI is float("nan"); filled in at pipeline level.
@@ -51,6 +66,8 @@ class SGC(BaseMethod):
         Parameters
         ----------
         data : GraphData
+        use_test_idx : bool
+            If True, evaluate on data.test_idx instead of data.val_idx.
 
         Returns
         -------

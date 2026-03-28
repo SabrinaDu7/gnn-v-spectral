@@ -28,15 +28,13 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 # ── The 9 model keys expected in METHOD_REGISTRY ────────────────────────────
-# NOTE: "lp" (label propagation) entries may become "rf" (random forest) once
-# Sabrina updates the registry to match the proposal.
 MODEL_KEYS = [
     "whole_lr",
-    "whole_lp",
+    "whole_rf",
     "kcut_lr",
-    "kcut_lp",
+    "kcut_rf",
     "regularized_lr",
-    "regularized_lp",
+    "regularized_rf",
     "sgc",
     "gcn",
     "gat",
@@ -116,10 +114,8 @@ def run_single(
     classifier.fit(data)
 
     # ── score on val and test splits ─────────────────────────────────────
-    # NOTE: score(data, split=...) requires Sabrina to extend BaseMethod.score
-    # with a split parameter. Until then these calls will raise TypeError.
-    val_metrics  = classifier.score(data, split="val")
-    test_metrics = classifier.score(data, split="test")
+    val_metrics  = classifier.score(data)
+    test_metrics = classifier.score(data, use_test_idx=True)
 
     return {
         "graph_id": graph_id,
