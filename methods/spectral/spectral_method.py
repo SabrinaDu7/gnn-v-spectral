@@ -133,17 +133,18 @@ class SpectralMethod(BaseMethod):
         self,
         data: GraphData,
         *,
-        use_test_idx: bool = False,
+        split: str = "val",
     ) -> dict[str, float]:
         """
-        Predict community labels for data.val_idx (or data.test_idx) and compute metrics.
+        Predict community labels for the specified split and compute metrics.
 
         ARI computed via sklearn.metrics against data.labels[idx].
         Parameters
         ----------
         data : GraphData
-        use_test_idx : bool
-            If True, evaluate on data.test_idx instead of data.val_idx.
+        split : str
+            One of "train", "val", or "test". Selects data.train_idx,
+            data.val_idx, or data.test_idx accordingly.
 
         Returns
         -------
@@ -153,7 +154,7 @@ class SpectralMethod(BaseMethod):
         if self.embeddings is None:
             raise RuntimeError("SpectralMethod.fit() must be called before score().")
 
-        idx = data.test_idx if use_test_idx else data.val_idx
+        idx = getattr(data, f"{split}_idx")
         features = data.graph.x if data.features is None else data.features
         preds = self.classifier.predict(self.embeddings, features)
         true = data.labels[idx].numpy()

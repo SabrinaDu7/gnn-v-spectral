@@ -84,7 +84,7 @@ def run_single(
         classifier.fit(data)
 
     val_metrics = classifier.score(data)
-    test_metrics = classifier.score(data, use_test_idx=True)
+    test_metrics = classifier.score(data, split="test")
 
     return {
         "graph_id": graph_id,
