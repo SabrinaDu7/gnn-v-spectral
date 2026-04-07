@@ -10,7 +10,7 @@ from methods.registry import METHOD_REGISTRY, ExperimentConfig
 # ---------------------------------------------------------------------------
 data = load_graph_data(
     metadata_csv="data/cache/synthetic/metadata/graph_index_sbm.csv",
-    graph_id="graph001_000_clean_sbm",
+    graph_id="graph001_045_targeted_betweenness_sbm",
 )
 
 # ---------------------------------------------------------------------------
@@ -21,7 +21,7 @@ config = ExperimentConfig(
     seed=0,
     hidden_dim=32,
     num_layers=2,
-    lr=1e-3,
+    lr=1e-2,
     epochs=50,
     dropout=0.0,
     num_heads=2,
@@ -36,13 +36,21 @@ methods = {name: ctor(config) for name, ctor in METHOD_REGISTRY.items()}
 print("Instantiated methods:", list(methods.keys()))
 
 # ---------------------------------------------------------------------------
-# Run fit + score on "whole_lr" (spectral; GNN stubs raise NotImplementedError)
+# Run fit + score on "whole_lr"
 # ---------------------------------------------------------------------------
-method = methods["gat"]
-method.fit(data, embeddings=data.kcut_eigenspectrum)
+spectral_type = "whole"  # Choose from "whole", "kcut", or "regularized"
+embedding = getattr(data, f"{spectral_type}_eigenspectrum")
 
-val_score  = method.score(data)
-test_score = method.score(data, use_test_idx=True)
+method_type_spectral = f"{spectral_type}_lr"
+method_type_gnn = "sgc"
+
+method = methods[method_type_gnn]
+method.fit(data, embeddings=embedding) # gnn methods ignore the embeddings argument and use one-hot encodings as features
+
+val_score  = method.score(data, split="val")
+test_score = method.score(data, split="test")
+train_score  = method.score(data, split="train")
 
 print("val  score:", val_score)
 print("test score:", test_score)
+print("train score:", train_score)
