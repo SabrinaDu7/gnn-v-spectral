@@ -180,3 +180,41 @@ def print_basic_graph_properties(graph: RealWorldGraph) -> None:
     print(f"Largest component size:    {props['largest_component_size']}")
     print(f"Largest component fraction:{props['largest_component_fraction']:.4f}")
     print(f"Top 10 component sizes:    {props['component_sizes_top10']}")
+
+def filter_classes_by_min_size(
+    graph: RealWorldGraph,
+    min_size: int,
+    graph_id_suffix: str | None = None,
+) -> RealWorldGraph:
+    """
+    Keep only nodes whose class appears at least `min_size` times.
+    Then relabel the remaining classes to contiguous ids 0..C-1.
+    """
+    counts = class_counts(graph)
+    keep_classes = sorted([cls for cls, cnt in counts.items() if cnt >= min_size])
+
+    if not keep_classes:
+        raise ValueError(f"No classes remain after filtering with min_size={min_size}")
+
+    keep_mask = np.isin(graph.labels, keep_classes)
+    kept_nodes = np.where(keep_mask)[0]
+
+    suffix = graph_id_suffix or f"min{min_size}"
+    subgraph = extract_node_induced_subgraph(graph, kept_nodes, suffix)
+
+    old_labels = subgraph.labels.copy()
+    new_classes = sorted(np.unique(old_labels))
+    relabel_map = {old: new for new, old in enumerate(new_classes)}
+    new_labels = np.array([relabel_map[int(x)] for x in old_labels], dtype=int)
+
+    subgraph.labels = new_labels
+    subgraph.metadata = dict(subgraph.metadata)
+    subgraph.metadata["original_class_ids_retained"] = [int(x) for x in new_classes]
+    subgraph.metadata["min_class_size_filter"] = int(min_size)
+    subgraph.metadata["num_classes"] = int(len(new_classes))
+    subgraph.metadata["notes"] = (
+        (subgraph.metadata.get("notes", "") + " | ").strip(" |")
+        + f" Retained only classes with size >= {min_size} and relabeled to contiguous ids."
+    )
+
+    return subgraph

@@ -8,6 +8,8 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+import scipy.io
+import scipy.sparse
 
 @dataclass
 class RealWorldGraph:
@@ -366,28 +368,174 @@ def load_lastfm_asia(raw_dir: str | Path) -> RealWorldGraph:
     _validate_graph(graph)
     return graph
 
-def load_facebook_residence(raw_dir: str | Path, campus_name: str) -> RealWorldGraph:
+def _one_hot_encode_categorical_columns(arr: np.ndarray) -> np.ndarray:
     """
-    Load one Facebook100 campus using residence as the target label.
-
-    Important:
-    - remove residence/dorm/house from features to avoid leakage
+    One-hot encode each categorical column independently, then concatenate.
+    Keeps 0 as its own category, which is useful because 0 denotes missing/unknown
+    in Facebook100 metadata.
     """
-    raise NotImplementedError("Implement after LastFM.")
+    if arr.ndim != 2:
+        raise ValueError(f"Expected 2D array for one-hot encoding, got shape {arr.shape}")
 
+    n = arr.shape[0]
+    encoded_blocks = []
+
+    for j in range(arr.shape[1]):
+        col = arr[:, j].astype(int)
+        categories = np.unique(col)
+        cat_to_idx = {cat: idx for idx, cat in enumerate(categories)}
+
+        block = np.zeros((n, len(categories)), dtype=np.uint8)
+        for i, val in enumerate(col):
+            block[i, cat_to_idx[val]] = 1
+
+        encoded_blocks.append(block)
+
+    if not encoded_blocks:
+        return np.zeros((n, 0), dtype=np.uint8)
+
+    return np.concatenate(encoded_blocks, axis=1)
+
+
+def _csr_to_edge_dataframe(A: scipy.sparse.spmatrix) -> pd.DataFrame:
+    """
+    Convert a sparse adjacency matrix to an edge DataFrame with columns src, dst.
+    """
+    A = A.tocoo()
+    edges = pd.DataFrame({
+        "src": A.row.astype(int),
+        "dst": A.col.astype(int),
+    })
+    return edges
+
+def load_facebook_residence(raw_dir: str | Path, campus_name: str = "Penn94") -> RealWorldGraph:
+    """
+    Load one Facebook100 campus using residence/dorm/house as the target label.
+
+    Expected raw file:
+        <raw_dir>/<campus_name>.mat
+
+    local_info columns:
+        0: student/faculty/status
+        1: gender
+        2: major
+        3: second major/minor
+        4: dorm/house/residence   <-- target
+        5: year
+        6: high school
+
+    Missing entries are encoded as 0.
+    """
+    raw_dir = Path(raw_dir)
+    mat_path = raw_dir / f"{campus_name}.mat"
+
+    if not mat_path.exists():
+        raise FileNotFoundError(f"Missing raw Facebook100 file: {mat_path}")
+
+    mat = scipy.io.loadmat(mat_path)
+
+    if "A" not in mat or "local_info" not in mat:
+        raise ValueError("Expected keys {'A', 'local_info'} in Facebook100 .mat file")
+
+    A = mat["A"]
+    local_info = mat["local_info"]
+
+    if not scipy.sparse.issparse(A):
+        raise ValueError("Expected adjacency matrix A to be a scipy sparse matrix")
+
+    if local_info.ndim != 2 or local_info.shape[1] != 7:
+        raise ValueError(
+            f"Expected local_info with shape (n, 7), got {local_info.shape}"
+        )
+
+    n_nodes_full = local_info.shape[0]
+
+    # Target: residence / dorm / house
+    residence = local_info[:, 4].astype(int)
+
+    # Keep only labeled nodes for this task
+    keep_mask = residence != 0
+    kept_nodes = np.where(keep_mask)[0]
+
+    if kept_nodes.size == 0:
+        raise ValueError("No labeled nodes remain after filtering residence != 0")
+
+    # Induced subgraph on kept nodes
+    A_kept = A[kept_nodes][:, kept_nodes]
+
+    # Labels
+    labels = residence[keep_mask]
+
+    # Features: all metadata except residence column 4
+    feature_cols = [0, 1, 2, 3, 5, 6]
+    raw_feature_metadata = local_info[keep_mask][:, feature_cols].astype(int)
+    features = _one_hot_encode_categorical_columns(raw_feature_metadata)
+
+    # Edge list
+    edges = _csr_to_edge_dataframe(A_kept)
+
+    # Standardize to simple undirected graph
+    edges = _remove_self_loops(edges)
+    edges = _symmetrize_edges(edges)
+    edges = _deduplicate_undirected_edges(edges)
+
+    metadata = {
+        "graph_id": f"facebook_{campus_name.lower()}_residence",
+        "dataset": "facebook100",
+        "campus": campus_name,
+        "n_nodes": int(labels.shape[0]),
+        "n_edges": int(len(edges)),
+        "num_classes": int(len(np.unique(labels))),
+        "label_name": "residence",
+        "has_features": True,
+        "feature_dim": int(features.shape[1]),
+        "is_directed_original": False,
+        "was_symmetrized": True,
+        "removed_self_loops": True,
+        "n_nodes_original": int(n_nodes_full),
+        "n_nodes_retained": int(labels.shape[0]),
+        "dropped_unlabeled_nodes": int(n_nodes_full - labels.shape[0]),
+        "feature_columns_used": [
+            "status",
+            "gender",
+            "major",
+            "second_major_minor",
+            "year",
+            "high_school",
+        ],
+        "feature_columns_excluded": ["residence"],
+        "notes": (
+            "Facebook100 campus graph using residence as target. "
+            "Dropped nodes with missing residence (label=0). "
+            "One-hot encoded non-target metadata columns. "
+            "Excluded residence from features to avoid leakage."
+        ),
+    }
+
+    graph = RealWorldGraph(
+        graph_id=f"facebook_{campus_name.lower()}_residence",
+        dataset="facebook100",
+        edges=edges.reset_index(drop=True),
+        labels=labels,
+        features=features,
+        metadata=metadata,
+    )
+
+    _validate_graph(graph)
+    return graph
 
 def save_real_world_graph(graph: RealWorldGraph, out_dir: str | Path) -> None:
     out_dir = Path(out_dir)
 
     edges_dir = out_dir / "edges"
     labels_dir = out_dir / "labels_processed"
-    metadata_dir = out_dir / "metadata"
     features_dir = out_dir / "features"
+    metadata_dir = out_dir / "metadata"
 
     edges_dir.mkdir(parents=True, exist_ok=True)
     labels_dir.mkdir(parents=True, exist_ok=True)
-    metadata_dir.mkdir(parents=True, exist_ok=True)
     features_dir.mkdir(parents=True, exist_ok=True)
+    metadata_dir.mkdir(parents=True, exist_ok=True)
 
     edge_file = edges_dir / f"{graph.graph_id}_edges.csv"
     label_file = labels_dir / f"{graph.graph_id}_labels.npy"
@@ -411,6 +559,7 @@ def load_real_world_graph(name: str, raw_dir: str | Path, **kwargs) -> RealWorld
     if name == "lastfm_asia":
         return load_lastfm_asia(raw_dir)
     if name == "facebook_residence":
-        return load_facebook_residence(raw_dir, **kwargs)
+        campus_name = kwargs.get("campus_name", "Penn94")
+        return load_facebook_residence(raw_dir, campus_name=campus_name)
 
     raise ValueError(f"Unknown dataset: {name}")

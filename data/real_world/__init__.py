@@ -15,6 +15,7 @@ from .characterize import (
     connected_components,
     extract_node_induced_subgraph,
     extract_largest_connected_component,
+    filter_classes_by_min_size,
 )
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "connected_components",
 "extract_node_induced_subgraph",
 "extract_largest_connected_component",
+"filter_classes_by_min_size",
 ]
