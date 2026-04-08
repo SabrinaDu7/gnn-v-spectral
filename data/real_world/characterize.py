@@ -1,32 +1,131 @@
-# Graph characterization: sparsity, heterophily, ESNR
 from __future__ import annotations
 
+from collections import deque
+
 import numpy as np
-import pandas as pd
 
 from .loaders import RealWorldGraph
 
 
 def degree_sequence(graph: RealWorldGraph) -> np.ndarray:
-    edges = graph.edges
     n = graph.metadata["n_nodes"]
-
     deg = np.zeros(n, dtype=int)
-    src_counts = edges["src"].value_counts()
-    dst_counts = edges["dst"].value_counts()
 
-    for node, count in src_counts.items():
-        deg[int(node)] += int(count)
-    for node, count in dst_counts.items():
-        deg[int(node)] += int(count)
+    if len(graph.edges) == 0:
+        return deg
+
+    src = graph.edges["src"].to_numpy(dtype=int)
+    dst = graph.edges["dst"].to_numpy(dtype=int)
+
+    np.add.at(deg, src, 1)
+    np.add.at(deg, dst, 1)
 
     return deg
 
 
 def class_counts(graph: RealWorldGraph) -> dict[int, int]:
-    labels = graph.labels
-    values, counts = np.unique(labels, return_counts=True)
+    values, counts = np.unique(graph.labels, return_counts=True)
     return {int(v): int(c) for v, c in zip(values, counts)}
+
+
+def adjacency_list(graph: RealWorldGraph) -> list[list[int]]:
+    n = graph.metadata["n_nodes"]
+    adj = [[] for _ in range(n)]
+
+    if len(graph.edges) == 0:
+        return adj
+
+    src = graph.edges["src"].to_numpy(dtype=int)
+    dst = graph.edges["dst"].to_numpy(dtype=int)
+
+    for u, v in zip(src, dst):
+        adj[u].append(v)
+        adj[v].append(u)
+
+    return adj
+
+
+def connected_components(graph: RealWorldGraph) -> list[list[int]]:
+    n = graph.metadata["n_nodes"]
+    adj = adjacency_list(graph)
+    visited = np.zeros(n, dtype=bool)
+    components = []
+
+    for start in range(n):
+        if visited[start]:
+            continue
+
+        q = deque([start])
+        visited[start] = True
+        comp = []
+
+        while q:
+            u = q.popleft()
+            comp.append(u)
+            for v in adj[u]:
+                if not visited[v]:
+                    visited[v] = True
+                    q.append(v)
+
+        components.append(comp)
+
+    components.sort(key=len, reverse=True)
+    return components
+
+
+def connected_component_sizes(graph: RealWorldGraph) -> list[int]:
+    return [len(comp) for comp in connected_components(graph)]
+
+
+def extract_node_induced_subgraph(graph: RealWorldGraph, nodes: list[int] | np.ndarray, graph_id_suffix: str) -> RealWorldGraph:
+    """
+    Create a node-induced subgraph and reindex nodes to 0..k-1.
+    """
+    nodes = np.array(sorted(nodes), dtype=int)
+    node_set = set(nodes.tolist())
+    old_to_new = {old: new for new, old in enumerate(nodes)}
+
+    edges = graph.edges
+    mask = edges["src"].isin(node_set) & edges["dst"].isin(node_set)
+    sub_edges = edges.loc[mask].copy()
+
+    sub_edges["src"] = sub_edges["src"].map(old_to_new)
+    sub_edges["dst"] = sub_edges["dst"].map(old_to_new)
+    sub_edges = sub_edges.reset_index(drop=True)
+
+    sub_labels = graph.labels[nodes]
+
+    sub_features = None
+    if graph.features is not None:
+        sub_features = graph.features[nodes]
+
+    sub_metadata = dict(graph.metadata)
+    sub_metadata["graph_id"] = f"{graph.graph_id}_{graph_id_suffix}"
+    sub_metadata["n_nodes"] = int(len(nodes))
+    sub_metadata["n_edges"] = int(len(sub_edges))
+    sub_metadata["num_classes"] = int(len(np.unique(sub_labels)))
+    sub_metadata["notes"] = (
+        (graph.metadata.get("notes", "") + " | ").strip(" |")
+        + f"Node-induced subgraph: {graph_id_suffix}"
+    )
+
+    return RealWorldGraph(
+        graph_id=f"{graph.graph_id}_{graph_id_suffix}",
+        dataset=graph.dataset,
+        edges=sub_edges,
+        labels=sub_labels,
+        features=sub_features,
+        metadata=sub_metadata,
+    )
+
+
+def extract_largest_connected_component(graph: RealWorldGraph) -> RealWorldGraph:
+    comps = connected_components(graph)
+    if not comps:
+        raise ValueError("Graph has no connected components.")
+
+    gcc_nodes = comps[0]
+    return extract_node_induced_subgraph(graph, gcc_nodes, "gcc")
 
 
 def basic_graph_properties(graph: RealWorldGraph) -> dict:
@@ -35,6 +134,7 @@ def basic_graph_properties(graph: RealWorldGraph) -> dict:
     deg = degree_sequence(graph)
 
     density = 0.0 if n <= 1 else (2 * m) / (n * (n - 1))
+    comp_sizes = connected_component_sizes(graph)
 
     props = {
         "graph_id": graph.graph_id,
@@ -46,9 +146,15 @@ def basic_graph_properties(graph: RealWorldGraph) -> dict:
         "has_features": graph.metadata["has_features"],
         "feature_dim": graph.metadata["feature_dim"],
         "avg_degree": float(np.mean(deg)),
+        "median_degree": float(np.median(deg)),
         "min_degree": int(np.min(deg)),
         "max_degree": int(np.max(deg)),
+        "num_isolated_nodes": int(np.sum(deg == 0)),
         "density": float(density),
+        "num_connected_components": int(len(comp_sizes)),
+        "largest_component_size": int(comp_sizes[0]) if comp_sizes else 0,
+        "largest_component_fraction": float(comp_sizes[0] / n) if comp_sizes and n > 0 else 0.0,
+        "component_sizes_top10": comp_sizes[:10],
     }
     return props
 
@@ -56,15 +162,21 @@ def basic_graph_properties(graph: RealWorldGraph) -> dict:
 def print_basic_graph_properties(graph: RealWorldGraph) -> None:
     props = basic_graph_properties(graph)
 
-    print(f"Graph ID:      {props['graph_id']}")
-    print(f"Dataset:       {props['dataset']}")
-    print(f"Nodes:         {props['n_nodes']}")
-    print(f"Edges:         {props['n_edges']}")
-    print(f"Classes:       {props['num_classes']}")
-    print(f"Class counts:  {props['class_counts']}")
-    print(f"Has features:  {props['has_features']}")
-    print(f"Feature dim:   {props['feature_dim']}")
-    print(f"Avg degree:    {props['avg_degree']:.3f}")
-    print(f"Min degree:    {props['min_degree']}")
-    print(f"Max degree:    {props['max_degree']}")
-    print(f"Density:       {props['density']:.6f}")
+    print(f"Graph ID:                  {props['graph_id']}")
+    print(f"Dataset:                   {props['dataset']}")
+    print(f"Nodes:                     {props['n_nodes']}")
+    print(f"Edges:                     {props['n_edges']}")
+    print(f"Classes:                   {props['num_classes']}")
+    print(f"Class counts:              {props['class_counts']}")
+    print(f"Has features:              {props['has_features']}")
+    print(f"Feature dim:               {props['feature_dim']}")
+    print(f"Average degree:            {props['avg_degree']:.3f}")
+    print(f"Median degree:             {props['median_degree']:.3f}")
+    print(f"Min degree:                {props['min_degree']}")
+    print(f"Max degree:                {props['max_degree']}")
+    print(f"Isolated nodes:            {props['num_isolated_nodes']}")
+    print(f"Density:                   {props['density']:.6f}")
+    print(f"Connected components:      {props['num_connected_components']}")
+    print(f"Largest component size:    {props['largest_component_size']}")
+    print(f"Largest component fraction:{props['largest_component_fraction']:.4f}")
+    print(f"Top 10 component sizes:    {props['component_sizes_top10']}")
