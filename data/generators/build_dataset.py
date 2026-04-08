@@ -28,7 +28,7 @@ GeneratorFn = Callable[[Any, int], tuple[nx.Graph, np.ndarray, dict[str, Any]]]
 
 DEFAULT_DATASET_ROOT = Path(DEFAULT_DATASET_ROOT)
 DEFAULT_NUM_BASE_GRAPHS = 5
-DEFAULT_NOISE_FRACS = [i / 100 for i in range(5, 50, 5)]
+DEFAULT_NOISE_FRACS = [i / 100 for i in range(5, 85, 5)]
 
 
 def _relative_to_root(path: Path, root: Path) -> str:
