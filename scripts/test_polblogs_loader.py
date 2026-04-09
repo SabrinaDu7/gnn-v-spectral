@@ -1,6 +1,6 @@
 from data.real_world.loaders import load_polblogs, save_real_world_graph
 
-raw_dir = "data/cache/realworld/polblogs"
+raw_dir = "data/cache/realworld_raw/polblogs"
 
 graph = load_polblogs(raw_dir)
 

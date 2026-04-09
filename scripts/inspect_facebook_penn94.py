@@ -2,7 +2,7 @@ from pathlib import Path
 import numpy as np
 import scipy.io
 
-path = Path("data/cache/realworld/facebook_penn94/Penn94.mat")
+path = Path("data/cache/realworld_raw/facebook_penn94/Penn94.mat")
 mat = scipy.io.loadmat(path)
 
 print("keys:", sorted(mat.keys()))

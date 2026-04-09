@@ -130,6 +130,22 @@ def extract_largest_connected_component(graph: RealWorldGraph) -> RealWorldGraph
     gcc_nodes = comps[0]
     return extract_node_induced_subgraph(graph, gcc_nodes, "gcc")
 
+def to_networkx_graph(graph: RealWorldGraph) -> nx.Graph:
+    """
+    Convert a RealWorldGraph edge list to an undirected NetworkX graph
+    with nodes 0..n-1.
+    """
+    n = graph.metadata["n_nodes"]
+    G = nx.Graph()
+    G.add_nodes_from(range(n))
+
+    if len(graph.edges) > 0:
+        src = graph.edges["src"].to_numpy(dtype=int)
+        dst = graph.edges["dst"].to_numpy(dtype=int)
+        G.add_edges_from(zip(src, dst))
+
+    return G
+
 
 def basic_graph_properties(graph: RealWorldGraph) -> dict:
     n = graph.metadata["n_nodes"]
@@ -144,7 +160,8 @@ def basic_graph_properties(graph: RealWorldGraph) -> dict:
 
     G.add_edges_from(zip(edges["src"], edges["dst"]))
 
-    esnr_stats = compute_esnr_from_graph(G, graph.labels)
+    G_nx = to_networkx_graph(graph)
+    esnr_stats = compute_esnr_from_graph(G_nx, graph.labels)
 
     props = {
         "graph_id": graph.graph_id,
@@ -165,7 +182,11 @@ def basic_graph_properties(graph: RealWorldGraph) -> dict:
         "largest_component_size": int(comp_sizes[0]) if comp_sizes else 0,
         "largest_component_fraction": float(comp_sizes[0] / n) if comp_sizes and n > 0 else 0.0,
         "component_sizes_top10": comp_sizes[:10],
-        "esnr": esnr_stats["esnr"],
+        "esnr": float(esnr_stats["esnr"]),
+        "esnr_n_outliers": int(esnr_stats["n_outlier_singular_values"]),
+        "esnr_outlier_mass": float(esnr_stats["outlier_mass"]),
+        "esnr_converged": bool(esnr_stats["converged"]),
+        "esnr_iterations": int(esnr_stats["iterations"]),
     }
     return props
 
