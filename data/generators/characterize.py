@@ -5,6 +5,8 @@ from typing import Any
 import networkx as nx
 import numpy as np
 
+from methods.esnr import compute_esnr_from_graph
+
 
 def _validate_graph_and_labels(G: nx.Graph, labels: np.ndarray) -> np.ndarray:
     """
@@ -118,7 +120,17 @@ def compute_all_graph_stats(G: nx.Graph, labels: np.ndarray) -> dict[str, Any]:
     """
     basic_stats = compute_basic_graph_stats(G)
     label_stats = compute_label_aware_stats(G, labels)
-    return {**basic_stats, **label_stats}
+    esnr_stats = compute_esnr_from_graph(G, labels)
+
+    return {
+        **basic_stats,
+        **label_stats,
+        "esnr": esnr_stats["esnr"],
+        "esnr_n_outlier_singular_values": esnr_stats["n_outlier_singular_values"],
+        "esnr_outlier_mass": esnr_stats["outlier_mass"],
+        "esnr_converged": esnr_stats["converged"],
+        "esnr_iterations": esnr_stats["iterations"],
+    }
 
 
 __all__ = [

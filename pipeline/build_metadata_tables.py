@@ -14,6 +14,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from methods.esnr import compute_esnr_from_graph
+import networkx as nx
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 # ── directory layout beneath data/cache/synthetic/ ───────────────────────────
@@ -94,6 +98,32 @@ def build_structural_noise_table(
 
     # Resolve asset paths (edge_path, label_path, spectra_path)
     table = table.apply(_resolve_asset_paths, axis=1, data_root=data_root)
+
+    def _compute_esnr_row(row: pd.Series) -> pd.Series:
+        edge_path = data_root / row["edge_path"]
+        label_path = data_root / row["label_path"]
+
+        # load graph
+        edges = pd.read_csv(edge_path)
+        labels = np.load(label_path)
+
+        G = nx.Graph()
+        G.add_nodes_from(range(len(labels)))
+        G.add_edges_from(zip(edges["src"], edges["dst"]))
+
+        esnr_stats = compute_esnr_from_graph(G, labels)
+
+        row["esnr"] = esnr_stats["esnr"]
+        row["esnr_n_outliers"] = esnr_stats["n_outlier_singular_values"]
+        row["esnr_outlier_mass"] = esnr_stats["outlier_mass"]
+        row["esnr_converged"] = esnr_stats["converged"]
+        row["esnr_iterations"] = esnr_stats["iterations"]
+
+        return row
+
+
+    logger.info("Computing ESNR for all graphs...")
+    table = table.apply(_compute_esnr_row, axis=1)
 
     # Save enriched graph_index CSVs so load_graph_data can read spectra_path
     for family in FAMILIES:

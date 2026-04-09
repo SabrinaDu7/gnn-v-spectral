@@ -6,6 +6,9 @@ import numpy as np
 
 from .loaders import RealWorldGraph
 
+import networkx as nx
+from methods.esnr import compute_esnr_from_graph
+
 
 def degree_sequence(graph: RealWorldGraph) -> np.ndarray:
     n = graph.metadata["n_nodes"]
@@ -136,6 +139,13 @@ def basic_graph_properties(graph: RealWorldGraph) -> dict:
     density = 0.0 if n <= 1 else (2 * m) / (n * (n - 1))
     comp_sizes = connected_component_sizes(graph)
 
+    G = nx.Graph()
+    edges = graph.edges
+
+    G.add_edges_from(zip(edges["src"], edges["dst"]))
+
+    esnr_stats = compute_esnr_from_graph(G, graph.labels)
+
     props = {
         "graph_id": graph.graph_id,
         "dataset": graph.dataset,
@@ -155,6 +165,7 @@ def basic_graph_properties(graph: RealWorldGraph) -> dict:
         "largest_component_size": int(comp_sizes[0]) if comp_sizes else 0,
         "largest_component_fraction": float(comp_sizes[0] / n) if comp_sizes and n > 0 else 0.0,
         "component_sizes_top10": comp_sizes[:10],
+        "esnr": esnr_stats["esnr"],
     }
     return props
 
