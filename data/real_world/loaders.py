@@ -524,6 +524,105 @@ def load_facebook_residence(raw_dir: str | Path, campus_name: str = "Penn94") ->
     _validate_graph(graph)
     return graph
 
+def load_ppi_adapted(
+    raw_dir: str | Path,
+    graph_index: int = 0,
+    label_index: int = 0,
+) -> RealWorldGraph:
+    """
+    Load one graph from the PyG PPI dataset and adapt it to a single-label
+    binary node-classification problem by selecting one label column.
+
+    Parameters
+    ----------
+    raw_dir : str | Path
+        Directory where the PyG PPI dataset should be stored/downloaded.
+    graph_index : int
+        Which graph from the PPI collection to use.
+    label_index : int
+        Which binary function label column to use as the target.
+    """
+    raw_dir = Path(raw_dir)
+
+    try:
+        import torch
+        from torch_geometric.datasets import PPI
+    except ImportError as e:
+        raise ImportError(
+            "Loading adapted PPI requires torch and torch_geometric to be installed."
+        ) from e
+
+    dataset = PPI(root=str(raw_dir))
+
+    if graph_index < 0 or graph_index >= len(dataset):
+        raise ValueError(
+            f"graph_index out of range: {graph_index}, dataset has {len(dataset)} graphs"
+        )
+
+    data = dataset[graph_index]
+
+    x = data.x.cpu().numpy()
+    y_full = data.y.cpu().numpy()
+
+    if y_full.ndim != 2:
+        raise ValueError(f"Expected PPI labels to be 2D, got shape {y_full.shape}")
+
+    if label_index < 0 or label_index >= y_full.shape[1]:
+        raise ValueError(
+            f"label_index out of range: {label_index}, available labels={y_full.shape[1]}"
+        )
+
+    labels = y_full[:, label_index].astype(int)
+
+    unique = np.unique(labels)
+    if not np.array_equal(unique, np.array([0, 1])) and not np.array_equal(unique, np.array([0])) and not np.array_equal(unique, np.array([1])):
+        raise ValueError(
+            f"Expected binary labels after selecting one PPI label column, got values {unique}"
+        )
+
+    edge_index = data.edge_index.cpu().numpy()
+    edges = pd.DataFrame({
+        "src": edge_index[0].astype(int),
+        "dst": edge_index[1].astype(int),
+    })
+
+    edges = _remove_self_loops(edges)
+    edges = _symmetrize_edges(edges)
+    edges = _deduplicate_undirected_edges(edges)
+
+    metadata = {
+        "graph_id": f"ppi_graph{graph_index:02d}_label{label_index:03d}",
+        "dataset": "ppi_adapted",
+        "n_nodes": int(x.shape[0]),
+        "n_edges": int(len(edges)),
+        "num_classes": int(len(np.unique(labels))),
+        "label_name": f"ppi_label_{label_index}",
+        "has_features": True,
+        "feature_dim": int(x.shape[1]),
+        "is_directed_original": False,
+        "was_symmetrized": True,
+        "removed_self_loops": True,
+        "graph_index": int(graph_index),
+        "label_index": int(label_index),
+        "notes": (
+            "Adapted single-graph transductive version of PyG PPI. "
+            "Selected one graph from the PPI collection and one binary label column "
+            "from the multi-label target matrix."
+        ),
+    }
+
+    graph = RealWorldGraph(
+        graph_id=f"ppi_graph{graph_index:02d}_label{label_index:03d}",
+        dataset="ppi_adapted",
+        edges=edges.reset_index(drop=True),
+        labels=labels,
+        features=x,
+        metadata=metadata,
+    )
+
+    _validate_graph(graph)
+    return graph
+
 def save_real_world_graph(graph: RealWorldGraph, out_dir: str | Path) -> None:
     out_dir = Path(out_dir)
 
@@ -561,5 +660,9 @@ def load_real_world_graph(name: str, raw_dir: str | Path, **kwargs) -> RealWorld
     if name == "facebook_residence":
         campus_name = kwargs.get("campus_name", "Penn94")
         return load_facebook_residence(raw_dir, campus_name=campus_name)
+    if name == "ppi_adapted":
+        graph_index = kwargs.get("graph_index", 0)
+        label_index = kwargs.get("label_index", 0)
+        return load_ppi_adapted(raw_dir, graph_index=graph_index, label_index=label_index)
 
     raise ValueError(f"Unknown dataset: {name}")
