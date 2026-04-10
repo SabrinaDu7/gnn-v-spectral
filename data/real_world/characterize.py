@@ -9,6 +9,9 @@ from .loaders import RealWorldGraph
 import networkx as nx
 from methods.esnr import compute_esnr_from_graph
 
+from sklearn.model_selection import StratifiedShuffleSplit
+from methods.feature_signal import compute_feature_signal
+
 
 def degree_sequence(graph: RealWorldGraph) -> np.ndarray:
     n = graph.metadata["n_nodes"]
@@ -250,3 +253,76 @@ def filter_classes_by_min_size(
     )
 
     return subgraph
+
+def feature_signal_properties(
+    graph: RealWorldGraph,
+    *,
+    n_splits: int = 5,
+    test_size: float = 0.3,
+    n_null_trials: int = 20,
+    random_state: int = 0,
+) -> dict:
+    """
+    Compute feature signal on a real-world graph using repeated stratified
+    train/test splits and aggregate the results.
+
+    Returns mean/std across splits for the feature-only probe.
+    """
+    if graph.features is None:
+        return {
+            "feature_macro_f1": np.nan,
+            "feature_macro_f1_std": np.nan,
+            "feature_accuracy": np.nan,
+            "feature_accuracy_std": np.nan,
+            "feature_null_macro_f1_mean": np.nan,
+            "feature_null_macro_f1_std": np.nan,
+            "feature_signal_raw": np.nan,
+            "feature_signal_raw_std": np.nan,
+            "feature_signal_norm": np.nan,
+            "feature_signal_norm_std": np.nan,
+            "feature_n_splits": 0,
+            "feature_n_null_trials": n_null_trials,
+        }
+
+    X = graph.features
+    y = graph.labels
+
+    splitter = StratifiedShuffleSplit(
+        n_splits=n_splits,
+        test_size=test_size,
+        random_state=random_state,
+    )
+
+    split_results = []
+
+    for split_id, (train_idx, test_idx) in enumerate(splitter.split(X, y)):
+        result = compute_feature_signal(
+            X,
+            y,
+            train_idx,
+            test_idx,
+            n_null_trials=n_null_trials,
+            random_state=random_state + split_id,
+        )
+        split_results.append(result)
+
+    def mean_of(key: str) -> float:
+        return float(np.mean([r[key] for r in split_results]))
+
+    def std_of(key: str) -> float:
+        return float(np.std([r[key] for r in split_results]))
+
+    return {
+        "feature_macro_f1": mean_of("feature_macro_f1"),
+        "feature_macro_f1_std": std_of("feature_macro_f1"),
+        "feature_accuracy": mean_of("feature_accuracy"),
+        "feature_accuracy_std": std_of("feature_accuracy"),
+        "feature_null_macro_f1_mean": mean_of("feature_null_macro_f1_mean"),
+        "feature_null_macro_f1_std": mean_of("feature_null_macro_f1_mean"),
+        "feature_signal_raw": mean_of("feature_signal_raw"),
+        "feature_signal_raw_std": std_of("feature_signal_raw"),
+        "feature_signal_norm": mean_of("feature_signal_norm"),
+        "feature_signal_norm_std": std_of("feature_signal_norm"),
+        "feature_n_splits": int(n_splits),
+        "feature_n_null_trials": int(n_null_trials),
+    }

@@ -20,7 +20,7 @@ def main() -> None:
         "ppi_adapted",
         raw_dir="data/raw/ppi",
         graph_index=0,
-        label_index=0,
+        label_index=38,
     )
     graph = extract_largest_connected_component(graph)
 
@@ -48,7 +48,7 @@ def main() -> None:
         "dataset": "ppi",
         "variant": "full_gcc",
         "task": "node_classification",
-        "label_name": "ppi_label_0",
+        "label_name": "ppi_label_38",
         "edge_path": "ppi/edges/ppi_edges.csv",
         "label_path": "ppi/labels/ppi_labels.npy",
         "feature_path": "ppi/features/ppi_features.npy",
@@ -65,7 +65,7 @@ def main() -> None:
         "num_classes": int(props["num_classes"]),
         "notes": (
             "Adapted single-graph transductive PPI dataset. "
-            "Selected graph_index=0 and label_index=0 from PyG PPI, then took GCC."
+            "Selected graph_index=0 and label_index=38 from PyG PPI, then took GCC."
         ),
         "esnr": float(props["esnr"]),
         "esnr_n_outliers": int(props["esnr_n_outliers"]),
@@ -76,7 +76,9 @@ def main() -> None:
 
     # Replace existing row if present, otherwise append
     if (df["graph_id"] == "ppi").any():
-        df.loc[df["graph_id"] == "ppi", :] = pd.DataFrame([row]).values
+        idx = df.index[df["graph_id"] == "ppi"][0]
+        for key, value in row.items():
+            df.at[idx, key] = value
     else:
         df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
 
