@@ -101,6 +101,9 @@ def load_graph_data(
             features = torch.from_numpy(np.load(features_pt)).float()
         else:
             features = torch.load(features_pt, weights_only=False)
+    elif "feature_path" in row.index and pd.notna(row["feature_path"]): # type: ignore
+        feature_path = dataset_root / Path(str(row["feature_path"]))
+        features = torch.from_numpy(np.load(feature_path)).float()
     else:
         rng = torch.Generator().manual_seed(seed)
         features = torch.randn(num_nodes, 5, generator=rng)
@@ -116,7 +119,7 @@ def load_graph_data(
     return GraphData(
         graph=graph,
         graph_id=graph_id,
-        noise_fraction=float(row["noise_frac"]), #type: ignore
+        noise_fraction=float(row["noise_frac"] if "noise_frac" in row.index else row["esnr"]), #type: ignore
         num_classes=int(row["num_communities"]), #type: ignore
         labels=labels,
         whole_eigenspectrum=whole_V,
