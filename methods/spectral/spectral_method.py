@@ -72,13 +72,18 @@ class SpectralMethod(BaseMethod):
         self.embedding_type = embedding_type
         self.classifier_type = classifier_type
         if classifier_type == "lr":
-            self.classifier: SpectralClassifier = LRClassifier(seed=config.seed)
+            self.classifier: SpectralClassifier = LRClassifier(seed=config.seed, C=config.lr_C)
         elif classifier_type == "lp":
             self.classifier = LPClassifier()
         elif classifier_type == "rf":
             if config.n_estimators is None:
                 raise ValueError("config.n_estimators must be set for classifier_type='rf'")
-            self.classifier = RFClassifier(seed=config.seed, n_estimators=config.n_estimators)
+            self.classifier = RFClassifier(
+                seed=config.seed,
+                n_estimators=config.n_estimators,
+                max_depth=config.rf_max_depth,
+                min_samples_leaf=config.rf_min_samples_leaf,
+            )
         else:
             raise ValueError(f"Invalid classifier_type: {classifier_type!r}")
         self.embeddings: Float[torch.Tensor, "n_nodes n_eigenvectors"] | None = None

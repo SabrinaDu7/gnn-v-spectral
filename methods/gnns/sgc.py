@@ -94,7 +94,7 @@ class SGC(BaseMethod):
             k_hops=cfg.k_hops,
         ).to(device)
 
-        optimizer = torch.optim.AdamW(self._model.parameters(), lr=cfg.lr)
+        optimizer = torch.optim.AdamW(self._model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
 
         self._model.train()
         for _ in range(cfg.epochs):
@@ -131,7 +131,7 @@ class SGC(BaseMethod):
         device = next(self._model.parameters()).device
         x = data.features.to(device)
         edge_index = data.graph.edge_index.to(device)
-        idx = getattr(data, f"{split}_idx")
+        idx = data.test_idx if use_test_idx else data.val_idx
 
         with torch.no_grad():
             self._model.eval()

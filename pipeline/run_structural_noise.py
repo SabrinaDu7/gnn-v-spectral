@@ -41,15 +41,12 @@ MODEL_KEYS = [
 DEFAULT_OPTUNA_TRIALS = 40
 
 
-def _get_model(model_key: str, num_classes: int):
+def _get_model(model_key: str, num_classes: int, **param_overrides):
     """Retrieve and instantiate a model from METHOD_REGISTRY."""
-    from methods import METHOD_REGISTRY, ExperimentConfig
+    from methods import METHOD_REGISTRY
+    from pipeline.tuning import build_config
 
-    config = ExperimentConfig(
-        num_classes=num_classes, seed=42,
-        hidden_dim=64, num_layers=2, lr=0.01, epochs=200, dropout=0.5,
-        num_heads=8, k_hops=2, n_estimators=100,
-    )
+    config = build_config(num_classes=num_classes, **param_overrides)
     return METHOD_REGISTRY[model_key](config)
 
 
@@ -58,6 +55,7 @@ def run_single(
     graph_row: pd.Series,
     optuna_n_trials: int = DEFAULT_OPTUNA_TRIALS,
     optuna_storage_path: str | Path | None = None,
+    best_params: dict | None = None,
 ) -> dict:
     """Fit and score one model on one graph instance."""
     from data import load_graph_data
@@ -70,7 +68,8 @@ def run_single(
 
     data = load_graph_data(metadata_csv=metadata_csv, graph_id=graph_id, seed=1)
 
-    classifier = _get_model(model_key, data.num_classes)
+    param_overrides = best_params or {}
+    classifier = _get_model(model_key, data.num_classes, **param_overrides)
 
     # Pass precomputed embeddings for spectral methods to avoid recomputation
     if isinstance(classifier, SpectralMethod):
@@ -98,7 +97,7 @@ def run_single(
         "optuna_n_trials": optuna_n_trials,
         "best_validation_ari": val_metrics.get("ARI"),
         "test_ari": test_metrics.get("ARI"),
-        "best_params_json": json.dumps({}),
+        "best_params_json": json.dumps(param_overrides),
     }
 
 
@@ -109,14 +108,33 @@ def run_structural_noise_experiment(
     optuna_n_trials: int = DEFAULT_OPTUNA_TRIALS,
     optuna_storage_path: str | Path | None = None,
     model_keys: list[str] | None = None,
+    n_jobs: int = 10,
 ) -> Path:
-    """Run experiment 1 across all graphs and models."""
+    """Run experiment 1 across all graphs and models.
+
+    If *optuna_n_trials* > 0, per-condition Optuna tuning is performed
+    first, then best params are applied to every graph at each condition.
+    """
+    from pipeline.tuning import tune_all_conditions, STRUCTURAL_TUNE_COLS
+
     output_csv = Path(output_csv)
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     failed_csv = Path(failed_csv) if failed_csv else output_csv.parent / "failed_runs.csv"
     failed_csv.parent.mkdir(parents=True, exist_ok=True)
     model_keys = model_keys or MODEL_KEYS
 
+    # ── Phase 1: per-condition Optuna tuning ───────────────────────────
+    best_params_map: dict[tuple, dict[str, dict]] = {}
+    if optuna_n_trials > 0:
+        best_params_map = tune_all_conditions(
+            experiment_table,
+            model_keys=model_keys,
+            n_trials=optuna_n_trials,
+            n_jobs=n_jobs,
+            experiment_type="structural_noise",
+        )
+
+    # ── Phase 2: evaluate all graphs with best params ──────────────────
     header_written = output_csv.exists()
     failed_header_written = failed_csv.exists()
 
@@ -124,16 +142,20 @@ def run_structural_noise_experiment(
     done = 0
 
     for _, row in experiment_table.iterrows():
+        condition_key = tuple(str(row[c]) for c in STRUCTURAL_TUNE_COLS)
         for model_key in model_keys:
             done += 1
             graph_id = row["graph_id"]
             logger.info("[%d/%d] Running %s on %s ...", done, total, model_key, graph_id)
+
+            bp = best_params_map.get(condition_key, {}).get(model_key, {})
 
             try:
                 result = run_single(
                     model_key=model_key, graph_row=row,
                     optuna_n_trials=optuna_n_trials,
                     optuna_storage_path=optuna_storage_path,
+                    best_params=bp,
                 )
                 result_df = pd.DataFrame([result])
                 result_df.to_csv(
