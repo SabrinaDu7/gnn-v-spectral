@@ -1,48 +1,58 @@
-"""Usage example: instantiate all methods and run one end-to-end."""
+"""Usage example: load all four real-world graphs and compute test ARI for every method."""
 
 from __future__ import annotations
 
 from data import load_graph_data
 from methods.registry import METHOD_REGISTRY, ExperimentConfig
 
-# ---------------------------------------------------------------------------
-# Load a real graph from the synthetic cache
-# ---------------------------------------------------------------------------
-data = load_graph_data(
-    metadata_csv="data/cache/synthetic/metadata/graph_index_sbm.csv",
-    graph_id="graph001_000_clean_sbm",
-)
+METADATA_CSV  = "data/cache/realworld/metadata/graph_index_realworld.csv"
+REAL_WORLD  = True
 
-# ---------------------------------------------------------------------------
-# Config — all fields populated so every method can be instantiated
-# ---------------------------------------------------------------------------
-config = ExperimentConfig(
-    num_classes=data.num_classes,
-    seed=0,
-    hidden_dim=32,
-    num_layers=2,
-    lr=1e-3,
-    epochs=50,
-    dropout=0.0,
-    num_heads=2,
-    k_hops=2,
-    n_estimators=100, # For Random Forest classifier
-)
+GRAPH_IDS = [
+    # "polblogs_gcc",
+    # "lastfm_asia",
+    # "facebook_penn94_residence_min50_gcc",
+    "ppi",
+    # "graph001_045_targeted_betweenness_sbm",
+]
 
-# ---------------------------------------------------------------------------
-# Instantiate all 9 methods from the registry
-# ---------------------------------------------------------------------------
-methods = {name: ctor(config) for name, ctor in METHOD_REGISTRY.items()}
-print("Instantiated methods:", list(methods.keys()))
+for graph_id in GRAPH_IDS:
+    print(f"\n{'='*60}")
+    print(f"Graph: {graph_id}")
+    print(f"{'='*60}")
 
-# ---------------------------------------------------------------------------
-# Run fit + score on "whole_lr" (spectral; GNN stubs raise NotImplementedError)
-# ---------------------------------------------------------------------------
-method = methods["gat"]
-method.fit(data, embeddings=data.kcut_eigenspectrum)
+    data = load_graph_data(
+        metadata_csv=METADATA_CSV,
+        graph_id=graph_id,
+        dataset_root="data/cache/" + ("realworld" if REAL_WORLD else "synthetic"),
+    )
 
-val_score  = method.score(data)
-test_score = method.score(data, use_test_idx=True)
+    config = ExperimentConfig(
+        num_classes=data.num_classes,
+        seed=0,
+        hidden_dim=32,
+        num_layers=2,
+        lr=1e-2,
+        epochs=50,
+        dropout=0.0,
+        num_heads=2,
+        k_hops=2,
+        n_estimators=100,
+    )
 
-print("val  score:", val_score)
-print("test score:", test_score)
+    methods = {name: ctor(config) for name, ctor in METHOD_REGISTRY.items()}
+
+    for method_name, method in methods.items():
+        embedding = None
+        for spectral_type in ("whole", "kcut", "regularized"):
+            if method_name.startswith(spectral_type):
+                embedding = getattr(data, f"{spectral_type}_eigenspectrum")
+                break
+
+        method.fit(data, embeddings=embedding)
+        result_train = method.score(data, split="train")
+        result_val = method.score(data, split="val")
+        result_test = method.score(data, split="test")
+        print(f"  {method_name:<20s}  ARI={result_train['ARI']:.4f} (train)")
+        print(f"  {method_name:<20s}  ARI={result_val['ARI']:.4f} (val)")
+        print(f"  {method_name:<20s}  ARI={result_test['ARI']:.4f} (test)")

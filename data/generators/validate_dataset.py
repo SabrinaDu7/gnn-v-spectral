@@ -12,7 +12,7 @@ from data import DEFAULT_DATASET_ROOT
 
 DEFAULT_DATASET_ROOT = Path(DEFAULT_DATASET_ROOT)
 DEFAULT_NUM_BASE_GRAPHS = 5
-DEFAULT_NOISE_FRACS = [i / 100 for i in range(5, 50, 5)]
+DEFAULT_NOISE_FRACS = [i / 100 for i in range(5, 85, 5)]
 EXPECTED_EDGE_COLUMNS = ["src", "dst", "same_comm", "comm_pair"]
 EXPECTED_NOISE_TYPES = ["clean", "random", "targeted_betweenness"]
 
@@ -346,7 +346,7 @@ def print_summary(*, family: str, df: pd.DataFrame) -> None:
 
     high_noise = df[df["noise_frac"] == max(DEFAULT_NOISE_FRACS)]
     if not high_noise.empty and {"largest_cc_fraction", "num_connected_components"} <= set(df.columns):
-        print("\nhigh-noise structural summary (noise_frac = 0.45):")
+        print("\nhigh-noise structural summary (noise_frac = 0.80):")
         grouped = (
             high_noise.groupby("noise_type")[["largest_cc_fraction", "num_connected_components"]]
             .mean()

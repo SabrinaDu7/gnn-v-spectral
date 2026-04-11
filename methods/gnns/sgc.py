@@ -111,16 +111,17 @@ class SGC(BaseMethod):
         self,
         data: GraphData,
         *,
-        use_test_idx: bool = False,
+        split: str = "val",
     ) -> dict[str, float]:
         """
-        Evaluate SGC predictions on data.val_idx (or data.test_idx) nodes.
+        Evaluate SGC predictions on the specified split nodes.
 
         Parameters
         ----------
         data : GraphData
-        use_test_idx : bool
-            If True, evaluate on data.test_idx instead of data.val_idx.
+        split : str
+            One of "train", "val", or "test". Selects data.train_idx,
+            data.val_idx, or data.test_idx accordingly.
 
         Returns
         -------

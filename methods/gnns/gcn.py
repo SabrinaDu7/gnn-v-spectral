@@ -120,16 +120,17 @@ class GCN(BaseMethod):
         self,
         data: GraphData,
         *,
-        use_test_idx: bool = False,
+        split: str = "val",
     ) -> dict[str, float]:
         """
-        Evaluate GCN predictions on data.val_idx (or data.test_idx) nodes.
+        Evaluate GCN predictions on the specified split nodes.
 
         Parameters
         ----------
         data : GraphData
-        use_test_idx : bool
-            If True, evaluate on data.test_idx instead of data.val_idx.
+        split : str
+            One of "train", "val", or "test". Selects data.train_idx,
+            data.val_idx, or data.test_idx accordingly.
 
         Returns
         -------
@@ -139,9 +140,10 @@ class GCN(BaseMethod):
         device = next(self._model.parameters()).device
         x = data.features.to(device)
         edge_index = data.graph.edge_index.to(device)
-        idx = data.test_idx if use_test_idx else data.val_idx
+        idx = getattr(data, f"{split}_idx")
 
         with torch.no_grad():
+            self._model.eval()
             logits = self._model(x, edge_index)
 
         preds = logits.argmax(dim=-1).cpu()

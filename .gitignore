@@ -5,3 +5,6 @@ results/*
 __pycache__/
 *.py[cod]
 .python-version
+
+.DS_Store
+gephi_export/
