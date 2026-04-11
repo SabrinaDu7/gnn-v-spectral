@@ -111,7 +111,7 @@ class GAT(BaseMethod):
             dropout=cfg.dropout,
         ).to(device)
 
-        optimizer = torch.optim.Adam(self._model.parameters(), lr=cfg.lr)
+        optimizer = torch.optim.Adam(self._model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
 
         self._model.train()
         for _ in range(cfg.epochs):

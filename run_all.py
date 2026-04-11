@@ -32,7 +32,12 @@ def step_build_metadata() -> tuple[Path, Path]:
     return save_metadata_tables(DATA_ROOT)
 
 
-def step_run_experiment_1(structural_table_path: Path) -> Path:
+def step_run_experiment_1(
+    structural_table_path: Path,
+    *,
+    optuna_n_trials: int = 40,
+    n_jobs: int = 10,
+) -> Path:
     """Step 2: Run structural-noise experiment."""
     from pipeline.run_structural_noise import run_structural_noise_experiment
 
@@ -40,7 +45,9 @@ def step_run_experiment_1(structural_table_path: Path) -> Path:
     out = RESULTS_ROOT / "structural_noise" / "raw" / "structural_noise_results.csv"
 
     logger.info("Running Experiment 1 (%d graph rows) ...", len(table))
-    return run_structural_noise_experiment(table, out)
+    return run_structural_noise_experiment(
+        table, out, optuna_n_trials=optuna_n_trials, n_jobs=n_jobs,
+    )
 
 
 def step_generate_features(feature_table_path: Path) -> pd.DataFrame:
@@ -56,7 +63,12 @@ def step_generate_features(feature_table_path: Path) -> pd.DataFrame:
     return enriched
 
 
-def step_run_experiment_2(feature_table_path: Path) -> Path:
+def step_run_experiment_2(
+    feature_table_path: Path,
+    *,
+    optuna_n_trials: int = 40,
+    n_jobs: int = 10,
+) -> Path:
     """Step 4: Run feature-informativeness experiment."""
     from pipeline.run_feature_informativeness import (
         run_feature_informativeness_experiment,
@@ -69,7 +81,9 @@ def step_run_experiment_2(feature_table_path: Path) -> Path:
     )
 
     logger.info("Running Experiment 2 (%d graph rows) ...", len(table))
-    return run_feature_informativeness_experiment(table, out)
+    return run_feature_informativeness_experiment(
+        table, out, optuna_n_trials=optuna_n_trials, n_jobs=n_jobs,
+    )
 
 
 def step_summarize() -> None:
@@ -98,6 +112,18 @@ def main() -> None:
         "--summarize-only", action="store_true",
         help="Skip experiments; just summarize and plot existing results",
     )
+    parser.add_argument(
+        "--n-optuna-trials", type=int, default=40,
+        help="Optuna trials per condition (0 = use fixed defaults, no tuning)",
+    )
+    parser.add_argument(
+        "--n-jobs", type=int, default=10,
+        help="Parallel workers for Optuna tuning",
+    )
+    parser.add_argument(
+        "--skip-features", action="store_true",
+        help="Skip feature generation; use existing .npy feature files",
+    )
     args = parser.parse_args()
 
     if args.summarize_only:
@@ -108,11 +134,20 @@ def main() -> None:
     structural_path, feature_path = step_build_metadata()
 
     if args.experiment is None or args.experiment == 1:
-        step_run_experiment_1(structural_path)
+        step_run_experiment_1(
+            structural_path,
+            optuna_n_trials=args.n_optuna_trials,
+            n_jobs=args.n_jobs,
+        )
 
     if args.experiment is None or args.experiment == 2:
-        step_generate_features(feature_path)
-        step_run_experiment_2(feature_path)
+        if not args.skip_features:
+            step_generate_features(feature_path)
+        step_run_experiment_2(
+            feature_path,
+            optuna_n_trials=args.n_optuna_trials,
+            n_jobs=args.n_jobs,
+        )
 
     step_summarize()
     step_plot()

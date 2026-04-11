@@ -58,6 +58,11 @@ class ExperimentConfig:
     k_hops: int
     # RF-specific
     n_estimators: int
+    # Tunable — defaults match prior hardcoded behavior
+    weight_decay: float = 0.0
+    lr_C: float = 1.0
+    rf_max_depth: int | None = None
+    rf_min_samples_leaf: int = 1
 
 
 class BaseMethod(abc.ABC):

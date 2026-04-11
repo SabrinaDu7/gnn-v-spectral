@@ -55,8 +55,8 @@ class LRClassifier(SpectralClassifier):
         Random seed passed to sklearn LogisticRegression.
     """
 
-    def __init__(self, *, seed: int) -> None:
-        self._lr = LogisticRegression(max_iter=1000, random_state=seed)
+    def __init__(self, *, seed: int, C: float = 1.0) -> None:
+        self._lr = LogisticRegression(max_iter=1000, random_state=seed, C=C)
 
     def fit(
         self,
@@ -92,9 +92,19 @@ class RFClassifier(SpectralClassifier):
         Number of trees in the forest.
     """
 
-    def __init__(self, *, seed: int, n_estimators: int) -> None:
+    def __init__(
+        self,
+        *,
+        seed: int,
+        n_estimators: int,
+        max_depth: int | None = None,
+        min_samples_leaf: int = 1,
+    ) -> None:
         self._rf = _RandomForestClassifier(
-            n_estimators=n_estimators, random_state=seed
+            n_estimators=n_estimators,
+            random_state=seed,
+            max_depth=max_depth,
+            min_samples_leaf=min_samples_leaf,
         )
 
     def fit(
