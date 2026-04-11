@@ -9,9 +9,9 @@ METADATA_CSV  = "data/cache/realworld/metadata/graph_index_realworld.csv"
 REAL_WORLD  = True
 
 GRAPH_IDS = [
-    "polblogs_gcc",
-    "lastfm_asia",
-    "facebook_penn94_residence_min50_gcc",
+    # "polblogs_gcc",
+    # "lastfm_asia",
+    # "facebook_penn94_residence_min50_gcc",
     "ppi",
     # "graph001_045_targeted_betweenness_sbm",
 ]
