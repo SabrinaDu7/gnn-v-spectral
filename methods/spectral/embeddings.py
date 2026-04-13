@@ -12,6 +12,10 @@ from torch import Tensor
 from torch_geometric.utils import degree, get_laplacian, to_scipy_sparse_matrix
 
 
+def _default_device() -> torch.device:
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 def _normalized_laplacian(
     edge_index: Int[Tensor, "2 num_edges"],
     num_nodes: int,
@@ -26,6 +30,8 @@ def _normalized_laplacian(
 def whole_eigenspectrum(
     edge_index: Int[Tensor, "2 num_edges"],
     num_nodes: int,
+    *,
+    device: torch.device | None = None,
 ) -> tuple[Float[Tensor, "num_nodes num_nodes"], Float[Tensor, "num_nodes"]]:
     """
     Full eigendecomposition of the symmetric normalized Laplacian.
@@ -36,6 +42,8 @@ def whole_eigenspectrum(
     ----------
     edge_index : Int[Tensor, "2 num_edges"]
     num_nodes : int
+    device : torch.device, optional
+        Device for computation. Defaults to CUDA if available, else CPU.
 
     Returns
     -------
@@ -43,8 +51,14 @@ def whole_eigenspectrum(
         Matrix whose columns are eigenvectors.
     """
     L = _normalized_laplacian(edge_index, num_nodes)
-    eigenvals, V = eigh(L.toarray(), eigvals_only=False) #type: ignore
-    return torch.from_numpy(V).float(), torch.from_numpy(eigenvals).float()
+    if device is None:
+        device = _default_device()
+    if device.type == "cpu":
+        eigenvals, V = eigh(L.toarray(), eigvals_only=False)  # type: ignore
+        return torch.from_numpy(V).float(), torch.from_numpy(eigenvals).float()
+    L_dense = torch.from_numpy(L.toarray()).float().to(device)
+    eigenvals, V = torch.linalg.eigh(L_dense)
+    return V.cpu(), eigenvals.cpu()
 
 
 def kcut_eigenspectrum(
@@ -94,6 +108,8 @@ def regularized_eigenspectrum(
     edge_index: Int[Tensor, "2 num_edges"],
     num_nodes: int,
     L: sp.spmatrix | None = None,
+    *,
+    device: torch.device | None = None,
 ) -> tuple[Float[Tensor, "num_nodes num_nodes"], Float[Tensor, "num_nodes"]]:
     """
     Full eigendecomposition of the Tikhonov-regularized symmetric normalized
@@ -105,17 +121,25 @@ def regularized_eigenspectrum(
     ----------
     edge_index : Int[Tensor, "2 num_edges"]
     num_nodes : int
+    device : torch.device, optional
+        Device for computation. Defaults to CUDA if available, else CPU.
 
     Returns
     -------
     Float[Tensor, "num_nodes num_nodes"]
         Matrix whose columns are eigenvectors.
     """
+    if device is None:
+        device = _default_device()
     if L is None:
         L = _normalized_laplacian(edge_index, num_nodes)
-        
+
     d = degree(edge_index[0], num_nodes=num_nodes).numpy() # TODO: Double check
     tau = float(np.mean(d))
     L_tik = L + tau * sp.eye(num_nodes)
-    eigenvals, V = eigh(L_tik.toarray(), eigvals_only=False)
-    return torch.from_numpy(V).float(), torch.from_numpy(eigenvals).float()
+    if device.type == "cpu":
+        eigenvals, V = eigh(L_tik.toarray(), eigvals_only=False)  # type: ignore
+        return torch.from_numpy(V).float(), torch.from_numpy(eigenvals).float()
+    L_dense = torch.from_numpy(L_tik.toarray()).float().to(device)
+    eigenvals, V = torch.linalg.eigh(L_dense)
+    return V.cpu(), eigenvals.cpu()

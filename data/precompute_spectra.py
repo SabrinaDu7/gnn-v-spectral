@@ -44,6 +44,11 @@ _RW_NAME_TO_DATASET: dict[str, str] = {
     "lastfm_asia": "lastfm_asia",
     "facebook_penn94": "facebook100",
     "ppi": "ppi",
+    "amazon_computers": "amazon_computers",
+    "amazon_photo": "amazon_photo",
+    "cora": "cora",
+    "dblp": "dblp",
+    "github": "github",
 }
 
 
@@ -53,6 +58,7 @@ def _save_spectra(
     edge_path: Path,
     label_path: Path, # Just to compute nodes
     out_path: Path,
+    device: torch.device,
 ) -> None:
     """Compute and save whole + regularized eigenspectra for one graph."""
     labels = np.load(label_path)
@@ -61,8 +67,8 @@ def _save_spectra(
 
     print(f"  {graph_id} ({num_nodes} nodes) ...", end=" ", flush=True)
 
-    whole_V, whole_evals = whole_eigenspectrum(edge_index, num_nodes)
-    reg_V, reg_evals = regularized_eigenspectrum(edge_index, num_nodes)
+    whole_V, whole_evals = whole_eigenspectrum(edge_index, num_nodes, device=device)
+    reg_V, reg_evals = regularized_eigenspectrum(edge_index, num_nodes, device=device)
 
     torch.save(
         {
@@ -81,6 +87,7 @@ def precompute(
     root: Path,
     families: tuple[str, ...],
     noise_types: tuple[str, ...],
+    device: torch.device,
 ) -> None:
     for idx, family in enumerate(families):
         out_dir = root / family / noise_types[idx] / "spectra"
@@ -107,10 +114,11 @@ def precompute(
                 edge_path=root / Path(str(row["edge_path"])),
                 label_path=root / Path(str(row["label_path"])),
                 out_path=out_path,
+                device=device
             )
 
 
-def precompute_real_world(*, root: Path, dataset_filter: str | None = None) -> None:
+def precompute_real_world(*, root: Path, dataset_filter: str | None = None, device: torch.device) -> None:
     """
     Precompute spectra for real-world graphs cached under root.
 
@@ -119,7 +127,8 @@ def precompute_real_world(*, root: Path, dataset_filter: str | None = None) -> N
     Edge and label paths in the CSV are relative to root.
     Saves spectra to {root}/spectra/{graph_id}.pt.
     """
-    meta_path = root / "metadata" / "graph_index_realworld.csv"
+    general_dataset_name = root.name.split("/")[-1] # e.g. "realworld" from "data/cache/realworld/"
+    meta_path = root / "metadata" / f"graph_index_{general_dataset_name}.csv"
 
     if not meta_path.exists():
         print(f"[skip] no metadata found at {meta_path}")
@@ -152,6 +161,7 @@ def precompute_real_world(*, root: Path, dataset_filter: str | None = None) -> N
             edge_path=root / Path(str(row["edge_path"])),
             label_path=root / Path(str(row["label_path"])),
             out_path=out_path,
+            device=device,
         )
 
 
@@ -160,24 +170,27 @@ class SyntheticConfig:
     name: Literal["all", "lfr", "sbm"] = "all"
     noise_type: Literal["clean", "random", "targeted_betweenness"] = "clean"
     root: Path = Path("data/cache/synthetic")
+    device: str = "cpu" # "cpu" or "cuda"
 
 
 @dataclass
 class RealWorldConfig:
     name: Literal["all", "facebook_penn94", "lastfm_asia", "polblogs", "ppi"] = "all"
     root: Path = Path("data/cache/realworld")
+    device: str = "cpu" # "cpu" or "cuda"
 
 
 def main() -> None:
     config = tyro.cli(Union[SyntheticConfig, RealWorldConfig])
+    device = torch.device(config.device)
 
     if isinstance(config, SyntheticConfig):
         families = FAMILIES if config.name == "all" else (config.name,)
         noise_types = NOISE_TYPES if config.noise_type == "all" else (config.noise_type,)
-        precompute(root=config.root, families=families, noise_types=noise_types)
+        precompute(root=config.root, families=families, noise_types=noise_types, device=device)
     else:
         dataset_filter = None if config.name == "all" else _RW_NAME_TO_DATASET[config.name]
-        precompute_real_world(root=config.root, dataset_filter=dataset_filter)
+        precompute_real_world(root=config.root, dataset_filter=dataset_filter, device=device)
 
 
 if __name__ == "__main__":
